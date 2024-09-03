@@ -1,5 +1,5 @@
 # Drug sensitivity modeling
-This repo contains scripts which I wrote to build predictive models on cancer cell line drug sensitivities. This was part of a homework I had to do and task with the required data was provided _a priori_.
+This repo contains scripts which I wrote to build predictive models on cancer cell line drug sensitivities. This was part of a homework I had. The tasks with the required data were provided _a priori_.
 
 ## Aim
 The tasks are described in the `input/comp-bio-homework-description.pdf` file.
