@@ -1,82 +1,105 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Drug Sensitivity Analysis using PCA, Feature Selection, and Machine Learning Models
-
-Created on Fri Jun 28 10:28:35 2024
+Created on Thu Oct 10 14:52:03 2024
 
 @author: ferenc.kagan
 """
 
-# Import required libraries
-import openpyxl
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Optimized script for gene expression analysis and drug sensitivity prediction
+"""
+
+# Load required libraries
 import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.linear_model import Lasso
-from sklearn.feature_selection import SelectFromModel
-from sklearn.metrics import (
-    mean_squared_error, r2_score, mean_absolute_error,
-    explained_variance_score, accuracy_score,
-    precision_score, recall_score, roc_auc_score, roc_curve
-)
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from scipy.stats import linregress
+from sklearn.linear_model import Lasso
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import PowerTransformer
+from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error, explained_variance_score, accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
+from sklearn.feature_selection import VarianceThreshold
+from sklearn.pipeline import Pipeline
 
-# Set the working directory
-os.chdir("/Users/ferenc.kagan/Documents/Projects/hw/")
+# Setting up working environment
+os.chdir("/Users/ferenc.kagan/Documents/Projects/Turbine_hw/")
 
-########################
-##### READ IN DATA #####
-########################
-
+# Load data
 expr = pd.read_csv("input/CCLE_expression.csv")
 metadata = pd.read_csv("input/sample_info.csv")
 sens = pd.read_excel("input/GDSC2_fitted_dose_response_25Feb20.xlsx")
 
-#############
-#### EDA ####
-#############
-
-# Display dimensions of the datasets
-print("Expression data shape:", expr.shape)
-print("Metadata shape:", metadata.shape)
-print("Sensitivity data shape:", sens.shape)
-
-# Display the first few rows of each dataset
-print("Expression data head:\n", expr.head())
-print("Metadata head:\n", metadata.head())
-print("Sensitivity data head:\n", sens.head())
-
-# Check for missing values in the expression data
-print("Number of NA values in expression data:", expr.isna().sum().sum())
-
-# Ensure all expressions are numerical
-print("Number of non-numerical entries in expression data:", expr.shape[1] - expr.applymap(np.isreal).all().sum())
-
-# Identify missing cross-references in metadata
-missing_crossrefs = metadata[~metadata['Sanger_Model_ID'].isin(sens['SANGER_MODEL_ID'])]
-print("Missing cross-references:\n", missing_crossrefs)
-
-# Filter and merge data for analysis
+# Filter metadata and align samples
 metadata = metadata[metadata['DepMap_ID'].isin(expr['Unnamed: 0'])]
 metadata = metadata.set_index('DepMap_ID').reindex(expr['Unnamed: 0']).reset_index()
 
-merged_df = expr.merge(metadata, left_on='Unnamed: 0', right_on='Unnamed: 0') \
-                .merge(sens[sens['DRUG_NAME'] == 'Lapatinib'], left_on='Sanger_Model_ID', right_on='SANGER_MODEL_ID')
-
-# Extract the first column (DepMap_ID)
-first_column = expr.iloc[:, 0]
+# Merge datasets and filter for a specific drug
+merged_df = expr.merge(metadata, left_on='Unnamed: 0', right_on='Unnamed: 0').merge(
+    sens[sens['DRUG_NAME'] == 'Lapatinib'], left_on='Sanger_Model_ID', right_on='SANGER_MODEL_ID')
 
 # Discretize drug sensitivity for classification
-threshold = merged_df['LN_IC50'].median()
+threshold = merged_df['LN_IC50'].median()  
 merged_df['Drug_Sensitivity'] = ['Resistant' if ln_ic50 > threshold else 'Sensitive' for ln_ic50 in merged_df['LN_IC50']]
 
-# Plot the distribution of LN_IC50
+# Scaling TPM values (standard practice, especially for regression)
+expr_mat = merged_df.iloc[:, 1:expr.shape[1]].values  # Remove first column
+
+# Split data for regression and classification
+X = merged_df.iloc[:, 1:expr.shape[1]].values
+y_reg = merged_df['LN_IC50'].values  # Regression
+y_class = merged_df['Drug_Sensitivity'].values  # Classification
+
+# Train-test split (only once to avoid leakage)
+X_train, X_test, y_train_reg, y_test_reg = train_test_split(X, y_reg, test_size=0.2, random_state=7)
+X_train_clf, X_test_clf, y_train_clf, y_test_clf = train_test_split(X, y_class, test_size=0.2, random_state=7)
+
+#################################
+###                           ###
+### Exploratory data analysis ###
+###                           ###
+#################################
+
+# What are the dimensions of the datasets?
+print(expr.shape)
+print(metadata.shape)
+print(sens.shape)
+
+# Have a quick glance at the tables
+print(expr.head())
+print(metadata.head())
+print(sens.head())
+
+# Are there NA terms?
+print(expr.isna().sum().sum())
+
+# Are the expressions all numerical?
+print(expr.shape[1] - expr.map(np.isreal).all().sum())
+
+# There are missing crossreferences, what are these?
+missing_crossrefs = metadata[~metadata['Sanger_Model_ID'].isin(sens['SANGER_MODEL_ID'])]
+print(missing_crossrefs)
+
+# Prepare data for downstream analysis
+metadata = metadata[metadata['DepMap_ID'].isin(expr['Unnamed: 0'])]
+metadata = metadata.set_index('DepMap_ID').reindex(expr['Unnamed: 0']).reset_index()
+
+merged_df = expr.merge(metadata, left_on='Unnamed: 0', right_on='Unnamed: 0').merge(sens[sens['DRUG_NAME'] == 'Lapatinib'], left_on='Sanger_Model_ID', right_on='SANGER_MODEL_ID')
+
+# Extracting the first column with DepMap_ID
+first_column = expr.iloc[:, 0]
+
+## Will discretize the drug sensitivity for downstream classification
+# Defining median as a threshold for LN_IC50 and categorizing
+threshold = merged_df['LN_IC50'].median()  
+merged_df['Drug_Sensitivity'] = ['Resistant' if ln_ic50 > threshold else 'Sensitive' for ln_ic50 in merged_df['LN_IC50']]
+
+# Drug sensitivity distribution
 plt.figure(figsize=(10, 6))
 sns.histplot(merged_df['LN_IC50'], bins=30, kde=True)
 plt.xlabel('LN_IC50')
@@ -84,23 +107,76 @@ plt.ylabel('Frequency')
 plt.title('Distribution of LN_IC50')
 plt.axvline(threshold, color='red', linestyle='--', linewidth=1.5, label=f'Median LN_IC50: {threshold:.2f}')
 plt.grid(True)
-plt.legend()
 plt.savefig('output/drug_sens.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-####################################
-##### DIMENSIONALITY REDUCTION #####
-####################################
 
-# Extract gene expression features
-expr_mat = expr.iloc[:, 1:].values
 
-# Run PCA
+######################################
+###                                ###
+### Feature preprocessing pipeline ###
+###                                ###
+######################################
+
+# Filter genes with low variance (genes with near-constant expression can be removed)
+variance_threshold = VarianceThreshold(threshold=0.1)
+
+# Scale expression data (Z-score normalization)
+scaler = PowerTransformer()
+
+################################
+###                          ###
+### Setting up the pipelines ###
+###                          ###
+################################
+
+# Define pipelines for both models (regression)
+rf_pipeline = Pipeline([
+    ('var_filter', variance_threshold),
+    ('scaler', scaler),
+    ('regressor', RandomForestRegressor(random_state=7))
+])
+
+lasso_pipeline = Pipeline([
+    ('var_filter', variance_threshold),
+    ('scaler', scaler),
+    ('regressor', Lasso())
+])
+
+# Hyperparameter grid for both models
+param_grid_rf = {
+    'regressor__n_estimators': [100, 200],
+    'regressor__max_depth': [None, 5, 10],
+    'regressor__min_samples_split': [2, 5]
+}
+
+param_grid_lasso = {
+    'regressor__alpha': [0.01, 0.1, 1.0]
+}
+
+################################
+###                          ###
+### Dimensionality reduction ###
+###                          ###
+################################
+
+# Extract the transformed TPM values from the scaler step
+pipeline = Pipeline([
+    ('scaler', scaler),
+    ('regressor',  RandomForestRegressor(random_state=7))
+])
+
+
+pipeline.fit(X)
+# Now apply the scaling to the filtered data
+X_scaled = rf_pipeline.named_steps['scaler'].transform(X)
+
+# Now use X_scaled as input for PCA
 n_components = 10
 pca = PCA(n_components=n_components)
-expr_pca = pca.fit_transform(expr_mat)
+expr_pca = pca.fit_transform(X_scaled)
 
-# Plot Scree Plot and PCA results
+# Plotting code for PCA (same as what you provided)
 fig, axes = plt.subplots(2, 1, figsize=(12, 12))
 components = range(1, n_components + 1)
 axes[0].plot(components, pca.explained_variance_ratio_, marker='o')
@@ -108,156 +184,84 @@ axes[0].set_title('Scree Plot')
 axes[0].set_xlabel('Principal Component')
 axes[0].set_ylabel('Explained Variance Ratio')
 
-pca_plot = sns.scatterplot(x=expr_pca[:, 0], y=expr_pca[:, 1], hue=metadata['primary_disease'], ax=axes[1], legend='full')
+# Plot PCA
+pca_plot = sns.scatterplot(x=expr_pca[:, 0], y=expr_pca[:, 1], hue=merged_df['primary_disease'], ax=axes[1], legend='full')
 axes[1].set_title('PCA of Expression Data')
 axes[1].set_xlabel('PC1')
 axes[1].set_ylabel('PC2')
+axes[1].get_legend().remove()
 handles, labels = pca_plot.get_legend_handles_labels()
 fig.legend(handles, labels, loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.1))
 fig.tight_layout(rect=[0, 0.1, 1, 0.95])
 plt.savefig('output/pca.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-#############################
-##### FEATURE SELECTION #####
-#############################
 
-# Set seed for reproducibility
-np.random.seed(7)
+###################
+###             ###
+### Regressions ###
+###             ###
+###################
 
-# Prepare data for feature selection
-X = merged_df.iloc[:, 1:expr.shape[1]].values
-y = merged_df['LN_IC50'].values  # Regression target
-y_class = merged_df['Drug_Sensitivity'].values  # Classification target
 
-# RandomForest feature selection
-rf = RandomForestRegressor(random_state=7)
-rf.fit(X, y)
-sel_rf = SelectFromModel(rf, prefit=True)
-sel_rf_idx = sel_rf.get_support(indices=True)
+# Run GridSearchCV for hyperparameter tuning
+grid_rf = GridSearchCV(rf_pipeline, param_grid_rf, cv=5, scoring='r2', n_jobs=-1)
+grid_lasso = GridSearchCV(lasso_pipeline, param_grid_lasso, cv=5, scoring='r2', n_jobs=-1)
 
-# Lasso regression feature selection
-lasso = Lasso(alpha=0.1)
-lasso.fit(X, y)
-sel_lasso = SelectFromModel(lasso, prefit=True)
-sel_lasso_idx = sel_lasso.get_support(indices=True)
-
-# Find overlapping features
-rf_features = set(sel_rf_idx)
-lasso_features = set(sel_lasso_idx)
-common_features = rf_features.intersection(lasso_features)
-print("Number of common features selected:", len(common_features))
-
-# Subset expression data for selected features
-X = X[:, list(common_features)]
-
-# Save selected gene IDs
-selected_gene_ids = [expr.columns[i] for i in common_features]
-gene_df = pd.DataFrame(selected_gene_ids, columns=["GeneID"])
-gene_df.to_csv("output/selected_genes.tsv", sep='\t', index=False, header=False)
-
-# Extract numerical IDs if applicable
-pattern = r'\((\d+)\)'
-extracted_numbers = pd.Series(selected_gene_ids).str.extract(pattern, expand=False).dropna().astype(int).tolist()
-pd.DataFrame(extracted_numbers).to_csv("output/selected_gene_ids.tsv", sep='\t', index=False, header=False)
-
-#####################################
-###### RANDOM FOREST APPROACH #######
-#####################################
-
-# Train/test split for regression
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
-
-# RandomForest Regressor with GridSearchCV
-rf = RandomForestRegressor(random_state=7)
-param_grid = {'n_estimators': [100, 150, 200], 'max_depth': [None, 2, 5, 10], 'min_samples_split': [2, 5, 10]}
-grid_search = GridSearchCV(rf, param_grid, cv=5, scoring='r2', verbose=1, n_jobs=-1)
-grid_search.fit(X_train, y_train)
-best_rf = grid_search.best_estimator_
-best_rf.fit(X_train, y_train)
+# Train and evaluate Random Forest
+grid_rf.fit(X_train, y_train_reg)
+best_rf = grid_rf.best_estimator_
 y_pred_rf = best_rf.predict(X_test)
+print(f"Random Forest R^2: {r2_score(y_test_reg, y_pred_rf)}")
 
-# Evaluate model performance
-r2 = r2_score(y_test, y_pred_rf)
-mse = mean_squared_error(y_test, y_pred_rf)
-mae = mean_absolute_error(y_test, y_pred_rf)
-evs = explained_variance_score(y_test, y_pred_rf)
-print("Random Forest Regression Performance:", r2, mse, mae, evs)
+# Train and evaluate Lasso
+grid_lasso.fit(X_train, y_train_reg)
+best_lasso = grid_lasso.best_estimator_
+y_pred_lasso = best_lasso.predict(X_test)
+print(f"Lasso R^2: {r2_score(y_test_reg, y_pred_lasso)}")
 
-# Plot predictions vs actual values
-slope, intercept, r_value, p_value, std_err = linregress(y_test, y_pred_rf)
-plt.scatter(y_test, y_pred_rf)
-plt.plot(y_test, intercept + slope * y_test, 'r')
-plt.title('Random Forest Predictions vs Actual')
-plt.xlabel("Actual ln(IC50)")
-plt.ylabel("Predicted ln(IC50)")
-plt.text(0.05, 0.85, f'R-squared: {r2:.2f}', transform=plt.gca().transAxes)
-plt.text(0.05, 0.80, f'MSE: {mse:.2f}', transform=plt.gca().transAxes)
-plt.savefig("output/rf_pred-vs-actual.png", dpi=300, bbox_inches='tight')
-plt.show()
+#######################
+###                 ###
+### Classifications ###
+###                 ###
+#######################
 
-#####################################
-##### LASSO REGRESSION APPROACH #####
-#####################################
+# Define classifier pipeline
+rf_clf_pipeline = Pipeline([
+    ('var_filter', variance_threshold),
+    ('scaler', scaler),
+    ('classifier', RandomForestClassifier(random_state=7))
+])
 
-# Train/test split for Lasso regression
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=7)
+# Hyperparameter grid for classifier
+param_grid_rf_clf = {
+    'classifier__n_estimators': [100, 200],
+    'classifier__max_depth': [None, 5, 10],
+    'classifier__min_samples_split': [2, 5]
+}
 
-lasso = Lasso(alpha=0.1)
-lasso.fit(X_train, y_train)
-y_pred_lasso = lasso.predict(X_test)
+# Run GridSearchCV for hyperparameter tuning
+grid_rf_clf = GridSearchCV(rf_clf_pipeline, param_grid_rf_clf, cv=5, scoring='accuracy', n_jobs=-1)
+grid_rf_clf.fit(X_train_clf, y_train_clf)
 
-# Evaluate Lasso regression performance
-r2 = r2_score(y_test, y_pred_lasso)
-mse = mean_squared_error(y_test, y_pred_lasso)
-mae = mean_absolute_error(y_test, y_pred_lasso)
-evs = explained_variance_score(y_test, y_pred_lasso)
-print("Lasso Regression Performance:", r2, mse, mae, evs)
+# Evaluate classification model
+best_rf_clf = grid_rf_clf.best_estimator_
+y_pred_clf = best_rf_clf.predict(X_test_clf)
+y_prob_clf = best_rf_clf.predict_proba(X_test_clf)[:, 1]
 
-# Plot Lasso predictions vs actual values
-slope, intercept, r_value, p_value, std_err = linregress(y_test, y_pred_lasso)
-plt.scatter(y_test, y_pred_lasso)
-plt.plot(y_test, intercept + slope * y_test, 'r')
-plt.title('Lasso Regression Predictions vs Actual')
-plt.xlabel("Actual ln(IC50)")
-plt.ylabel("Predicted ln(IC50)")
-plt.text(0.05, 0.85, f'R-squared: {r2:.2f}', transform=plt.gca().transAxes)
-plt.text(0.05, 0.80, f'MSE: {mse:.2f}', transform=plt.gca().transAxes)
-plt.savefig("output/lasso_pred-vs-actual.png", dpi=300, bbox_inches='tight')
-plt.show()
-
-################################################
-##### CLASSIFICATION USING RANDOM FOREST #######
-################################################
-
-# Train/test split for classification
-X_train, X_test, y_train, y_test = train_test_split(X, y_class, test_size=0.2, random_state=7)
-
-# RandomForest Classifier with GridSearchCV
-rf_clf = RandomForestClassifier(random_state=7)
-param_grid_clf = {'n_estimators': [100, 150, 200], 'max_depth': [None, 2, 5, 10], 'min_samples_split': [2, 5, 10]}
-grid_search_clf = GridSearchCV(rf_clf, param_grid_clf, cv=5, scoring='accuracy', verbose=1, n_jobs=-1)
-grid_search_clf.fit(X_train, y_train)
-best_rf_clf = grid_search_clf.best_estimator_
-best_rf_clf.fit(X_train, y_train)
-y_pred_rf_clf = best_rf_clf.predict(X_test)
-
-# Evaluate classification performance
-accuracy = accuracy_score(y_test, y_pred_rf_clf)
-precision = precision_score(y_test, y_pred_rf_clf, pos_label='Sensitive')
-recall = recall_score(y_test, y_pred_rf_clf, pos_label='Sensitive')
-roc_auc = roc_auc_score(y_test, best_rf_clf.predict_proba(X_test)[:, 1])
-print("Random Forest Classification Performance:", accuracy, precision, recall, roc_auc)
+# Performance metrics for classification
+print(f"Accuracy: {accuracy_score(y_test_clf, y_pred_clf)}")
+print(f"Precision: {precision_score(y_test_clf, y_pred_clf, pos_label='Sensitive')}")
+print(f"Recall: {recall_score(y_test_clf, y_pred_clf, pos_label='Sensitive')}")
+print(f"ROC AUC: {roc_auc_score(y_test_clf, y_prob_clf)}")
 
 # Plot ROC curve
-fpr, tpr, _ = roc_curve(y_test, best_rf_clf.predict_proba(X_test)[:, 1], pos_label='Sensitive')
-plt.plot(fpr, tpr, label=f'Random Forest (AUC = {roc_auc:.2f})')
-plt.plot([0, 1], [0, 1], 'k--')
-plt.title('ROC Curve')
+fpr, tpr, _ = roc_curve(y_test_clf, y_prob_clf, pos_label='Sensitive')
+plt.plot(fpr, tpr, color='blue', lw=2, label=f'ROC curve (area = {roc_auc_score(y_test_clf, y_prob_clf):.2f})')
+plt.plot([0, 1], [0, 1], color='gray', lw=2, linestyle='--')
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
-plt.legend()
+plt.legend(loc='lower right')
 plt.grid(True)
-plt.savefig("output/rf_roc_curve.png", dpi=300, bbox_inches='tight')
+plt.savefig("output/roc_curve.png", dpi=300, bbox_inches='tight')
 plt.show()
-
