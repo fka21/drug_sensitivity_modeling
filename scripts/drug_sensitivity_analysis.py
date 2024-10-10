@@ -14,6 +14,7 @@ Optimized script for gene expression analysis and drug sensitivity prediction
 
 # Load required libraries
 import os
+import umap
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -35,7 +36,7 @@ expr = pd.read_csv("input/CCLE_expression.csv")
 metadata = pd.read_csv("input/sample_info.csv")
 sens = pd.read_excel("input/GDSC2_fitted_dose_response_25Feb20.xlsx")
 
-# Filter metadata and align samples
+# Prepare data for downstream analysis
 metadata = metadata[metadata['DepMap_ID'].isin(expr['Unnamed: 0'])]
 metadata = metadata.set_index('DepMap_ID').reindex(expr['Unnamed: 0']).reset_index()
 
@@ -84,20 +85,6 @@ print(expr.shape[1] - expr.map(np.isreal).all().sum())
 # There are missing crossreferences, what are these?
 missing_crossrefs = metadata[~metadata['Sanger_Model_ID'].isin(sens['SANGER_MODEL_ID'])]
 print(missing_crossrefs)
-
-# Prepare data for downstream analysis
-metadata = metadata[metadata['DepMap_ID'].isin(expr['Unnamed: 0'])]
-metadata = metadata.set_index('DepMap_ID').reindex(expr['Unnamed: 0']).reset_index()
-
-merged_df = expr.merge(metadata, left_on='Unnamed: 0', right_on='Unnamed: 0').merge(sens[sens['DRUG_NAME'] == 'Lapatinib'], left_on='Sanger_Model_ID', right_on='SANGER_MODEL_ID')
-
-# Extracting the first column with DepMap_ID
-first_column = expr.iloc[:, 0]
-
-## Will discretize the drug sensitivity for downstream classification
-# Defining median as a threshold for LN_IC50 and categorizing
-threshold = merged_df['LN_IC50'].median()  
-merged_df['Drug_Sensitivity'] = ['Resistant' if ln_ic50 > threshold else 'Sensitive' for ln_ic50 in merged_df['LN_IC50']]
 
 # Drug sensitivity distribution
 plt.figure(figsize=(10, 6))
@@ -167,33 +154,35 @@ pipeline = Pipeline([
 ])
 
 
-pipeline.fit(X)
+pipeline.fit(X, y_reg)
 # Now apply the scaling to the filtered data
 X_scaled = rf_pipeline.named_steps['scaler'].transform(X)
 
-# Now use X_scaled as input for PCA
-n_components = 10
-pca = PCA(n_components=n_components)
-expr_pca = pca.fit_transform(X_scaled)
+# Dimensionality reduction using UMAP
+n_neighbors = 30  
+min_dist = 0.1  
+n_components = 2  
+metric = 'euclidean'
 
-# Plotting code for PCA (same as what you provided)
-fig, axes = plt.subplots(2, 1, figsize=(12, 12))
-components = range(1, n_components + 1)
-axes[0].plot(components, pca.explained_variance_ratio_, marker='o')
-axes[0].set_title('Scree Plot')
-axes[0].set_xlabel('Principal Component')
-axes[0].set_ylabel('Explained Variance Ratio')
+# Initialize UMAP
+umap_model = umap.UMAP(n_neighbors=n_neighbors, min_dist=min_dist, n_components=n_components, metric=metric, random_state=7)
 
-# Plot PCA
-pca_plot = sns.scatterplot(x=expr_pca[:, 0], y=expr_pca[:, 1], hue=merged_df['primary_disease'], ax=axes[1], legend='full')
-axes[1].set_title('PCA of Expression Data')
-axes[1].set_xlabel('PC1')
-axes[1].set_ylabel('PC2')
-axes[1].get_legend().remove()
-handles, labels = pca_plot.get_legend_handles_labels()
+# Apply UMAP on the scaled data
+expr_umap = umap_model.fit_transform(X_scaled)
+
+# Plotting UMAP
+fig, ax = plt.subplots(figsize=(12, 8))
+umap_plot = sns.scatterplot(x=expr_umap[:, 0], y=expr_umap[:, 1], hue=merged_df['primary_disease'], ax=ax, legend='full')
+ax.set_title('UMAP of Expression Data')
+ax.set_xlabel('UMAP1')
+ax.set_ylabel('UMAP2')
+ax.get_legend().remove()
+
+# Add legend separately
+handles, labels = umap_plot.get_legend_handles_labels()
 fig.legend(handles, labels, loc='lower center', ncol=4, bbox_to_anchor=(0.5, -0.1))
-fig.tight_layout(rect=[0, 0.1, 1, 0.95])
-plt.savefig('output/pca.png', dpi=300, bbox_inches='tight')
+plt.tight_layout(rect=[0, 0.1, 1, 0.95])
+plt.savefig('output/umap.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 
@@ -205,8 +194,8 @@ plt.show()
 
 
 # Run GridSearchCV for hyperparameter tuning
-grid_rf = GridSearchCV(rf_pipeline, param_grid_rf, cv=5, scoring='r2', n_jobs=-1)
-grid_lasso = GridSearchCV(lasso_pipeline, param_grid_lasso, cv=5, scoring='r2', n_jobs=-1)
+grid_rf = GridSearchCV(rf_pipeline, param_grid_rf, cv=5, scoring='r2', n_jobs=3)
+grid_lasso = GridSearchCV(lasso_pipeline, param_grid_lasso, cv=5, scoring='r2', n_jobs=3)
 
 # Train and evaluate Random Forest
 grid_rf.fit(X_train, y_train_reg)
@@ -241,7 +230,7 @@ param_grid_rf_clf = {
 }
 
 # Run GridSearchCV for hyperparameter tuning
-grid_rf_clf = GridSearchCV(rf_clf_pipeline, param_grid_rf_clf, cv=5, scoring='accuracy', n_jobs=-1)
+grid_rf_clf = GridSearchCV(rf_clf_pipeline, param_grid_rf_clf, cv=5, scoring='accuracy', n_jobs=3)
 grid_rf_clf.fit(X_train_clf, y_train_clf)
 
 # Evaluate classification model
@@ -265,3 +254,5 @@ plt.legend(loc='lower right')
 plt.grid(True)
 plt.savefig("output/roc_curve.png", dpi=300, bbox_inches='tight')
 plt.show()
+
+
