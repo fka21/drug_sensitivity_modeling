@@ -15,11 +15,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import umap.umap_ as umap
 from sklearn.decomposition import PCA
-
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import Lasso
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, PowerTransformer, RobustScaler
 from sklearn.metrics import r2_score, mean_squared_error, accuracy_score, precision_score, recall_score, roc_auc_score, roc_curve
 from sklearn.feature_selection import VarianceThreshold, SelectFromModel
 from sklearn.pipeline import Pipeline
@@ -95,7 +94,8 @@ plt.grid(True)
 plt.savefig('output/drug_sens.png', dpi=300, bbox_inches='tight')
 plt.show()
 
-
+# Are drug sesnitivity classifications balanced in proportion?
+merged_df['Drug_Sensitivity'].value_counts()
 
 ######################################
 ###                                ###
@@ -107,7 +107,7 @@ plt.show()
 variance_threshold = VarianceThreshold(threshold=0.1)
 
 # Scale expression data (Z-score normalization)
-scaler = StandardScaler()
+scaler = RobustScaler()
 
 ################################
 ###                          ###
@@ -266,8 +266,8 @@ plt.show()
 ###################
 
 # Run GridSearchCV for hyperparameter tuning
-grid_rf = GridSearchCV(rf_pipeline, param_grid_rf, cv=5, scoring='r2', n_jobs=32, verbose = 10)
-grid_lasso = GridSearchCV(lasso_pipeline, param_grid_lasso, cv=5, scoring='r2', n_jobs=32, verbose = 10)
+grid_rf = GridSearchCV(rf_pipeline, param_grid_rf, cv=5, scoring='r2', n_jobs=3, verbose = 10)
+grid_lasso = GridSearchCV(lasso_pipeline, param_grid_lasso, cv=5, scoring='r2', n_jobs=3, verbose = 10)
 
 # Train and evaluate Random Forest
 grid_rf.fit(X_train, y_train_reg)
@@ -327,7 +327,7 @@ plt.show()
 #######################
 
 # Run GridSearchCV for hyperparameter tuning
-grid_rf_clf = GridSearchCV(rf_clf_pipeline, param_grid_rf_clf, cv=5, scoring='accuracy', n_jobs=32, verbose = 10)
+grid_rf_clf = GridSearchCV(rf_clf_pipeline, param_grid_rf_clf, cv=5, scoring='accuracy', n_jobs=3, verbose = 10)
 grid_rf_clf.fit(X_train_clf, y_train_clf)
 
 # Evaluate classification model
@@ -370,8 +370,8 @@ X_test_pca = pca.transform(X_test)
 
 
 # Run GridSearchCV for hyperparameter tuning (PCA pipelines)
-grid_rf_pca = GridSearchCV(rf_pipeline_pca, param_grid_rf_pca, cv=5, scoring='r2', n_jobs=32, verbose = 10)
-grid_lasso_pca = GridSearchCV(lasso_pipeline_pca, param_grid_lasso_pca, cv=5, scoring='r2', n_jobs=32, verbose = 10)
+grid_rf_pca = GridSearchCV(rf_pipeline_pca, param_grid_rf_pca, cv=5, scoring='r2', n_jobs=3, verbose = 10)
+grid_lasso_pca = GridSearchCV(lasso_pipeline_pca, param_grid_lasso_pca, cv=5, scoring='r2', n_jobs=3, verbose = 10)
 
 # Evaluate Random Forest with PCA
 grid_rf_pca.fit(X_train_pca, y_train_reg)
@@ -421,7 +421,7 @@ plt.show()
 
 
 # Run GridSearchCV for hyperparameter tuning (Gradient Boosting Regressor)
-grid_gbr = GridSearchCV(gbr_pipeline, param_grid_gbr, cv=5, scoring='r2', n_jobs=32, verbose = 10)
+grid_gbr = GridSearchCV(gbr_pipeline, param_grid_gbr, cv=5, scoring='r2', n_jobs=3, verbose = 10)
 grid_gbr.fit(X_train, y_train_reg)
 best_gbr = grid_gbr.best_estimator_
 y_pred_gbr = best_gbr.predict(X_test)
@@ -454,7 +454,7 @@ plt.show()
 
 
 # Run GridSearchCV for hyperparameter tuning
-grid_gb_clf = GridSearchCV(gb_clf_pipeline, param_grid_gb_clf, cv=5, scoring='accuracy', n_jobs=32, verbose = 10)
+grid_gb_clf = GridSearchCV(gb_clf_pipeline, param_grid_gb_clf, cv=5, scoring='accuracy', n_jobs=3, verbose = 10)
 grid_gb_clf.fit(X_train_clf, y_train_clf)
 
 # Evaluate Gradient Boosting Classifier
