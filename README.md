@@ -1,31 +1,54 @@
-# Drug sensitivity modeling
-This repo contains scripts which I wrote to build predictive models on cancer cell line drug sensitivities. This was part of a homework I had. The tasks with the required data were provided _a priori_.
+# Building a predictive model for drug sensitivity
 
-## Aim
-The tasks are described in the `input/comp-bio-homework-description.pdf` file.
-  1. Given the data perform a dimensionality reduction with a preferred method and viusalize it.
-  2. Using gene expression data identify biomarkers for Lapatinib sensitivity.
-  3. Build a predictive model for Lapatinib sensitivity and evaluate it's performance.
+## Introduction
+
+This repo contains code I used to build a predictive model for drug sensitivity. 
+
+The repo structure is:
+    - `input/` contains tables used as input. These contain gene expression values from various cancer cell lines, associated meta-data, and drug sensitivity data.
+    - `output/` contains some of the figures and tables generated during data exploration and training phases.
+    - Jupyter Notebooks contain the code used. I used `data_exploration.ipynb` to get an idea for how the received data looks like. The `model_selection.ipynb` contains different training strategies I tried for selecting the method approach and model for the predictive task. This was followed up by `model_optimization_interpretation.ipynb`, where I tried to optimize the hyperparameters of the model using `optuna` and tried to understand the inner workings of the selected model.
+
+## Data description
+
+The Lapatinib drug sensitivity was the focus of this project. Therefore the target variable is `LN_IC50` (it is on logarithmic scale already) for Lapatinib. This drug is targeting lung and breast cancer.
+
+I had to use gene expression data and the rest was free to use. Based on my knowledge I decided to include `age`, `sex`, and `primary_disease`, next to gene expression. 
+
 > [!NOTE]  
-> The created predictive model is by no means exhaustive.
+> For a more in depth overview of the data please check the `data_exploration.ipynb`.
 
-## Summary
+## Training approach
 
-  **Task 1**
-  * I decided to use both principal component analysis (PCA) and Uniform Manifold Approximation and Projection (UMAP). 
-  * I retrieved only the first 10 principal components as from PC5 the explained variability does not change significantly (see: `output/pca.png`)
-  * The samples are colored according to the cancer type, some degree of separation of the samples is noticeable on the PC1.
-  * In the UMAP the blood cancer cell lines show a distinct separation from the rest, indicating some signature expression profile for these cancer types.
+In all cases I used a train-test split without taking the `primary_disease` segmentation in consideration as I wanted a predictive model which generalizes well. `RandomizedSearchCV` was used for hyperparameter tuning of all models with 5 fold cross validation. 
 
-  **Task 2**
-  * As the gene expression provided was TPM (transcripts-per-million) transformed and only cancer cell line samples were provided, there was no possibility of differential gene expression analysis. Instead, I used a feature selection approach.
-  * I used three regression approaches: *random forest*, *lasso regression*, and *gradient boosting*. Next to this I also binarized the drug sensitivity into *sensitive* and *resistant* using the median of drug sensitivity as a cut-off. This was translated then into a classifying problem for which I used 3 approaches: *random forest*, *lasso regression*, and *gradient boosting*. Models were wrapped into Pipeline and a hyperparameter search was performed using an exhaustive GridSearchCV.  
-  * A total of **318 genes** were selected as influential for Lapatinib sensitivity of cancer cells (see: `output/selected_genes.tsv` and `output/selected_gene_ids.tsv`).
-  * A systematic approach was also performed to get an idea of what functions are affected by the drug treatment. The analysis resulted in no enriched gene ontological terms.
-  * 
-  **Task 3**
-  * To evaluate the model I used a simple train/test split approach. I retained 20% of the samples as testing data.
-  * Firstly I used a *random forest regression* approach. I also implemented a short optimization step for the model fitting to try to improve the evaluation metrics. The model performance was lackluster (see: `output/rf_pred-vs-actual.png`).
-  * Secondly, I used the *lasso regression* in order to get better predictions. I used similar approaches as above. The overall model predictions showed slight improvement (see: `output/lasso_pred-vs-actual.png`).
-  * Thirdly, I used the *gradient boosting regression* with a further increase in performance (see: `output/gbr_pred-vs-actual.png`).
-  * Lastly I tried to convert the problem into a classification. As a classifier I chose the *random forest approach* and *gradient boosting classifier*. Similar steps were used as above to optimize the model fit and evaluate its performance. The classified performed somewhat poorly (see: `output/roc_curve.png` and `output/gb_roc_curve.png`)
+For all strategies and models learning curves were plotted (`output/faceted_*`), so were the mean squared errors (MSE) from the training process, and the MSE on the test set. Further metrics were also collected in tables (`output/evaluation_*`)
+
+I decided to try several regressor models from all major categories:
+    1. Linear Models:
+        LinearRegression – A basic linear regression model without regularization.
+        Ridge – A linear model with L2 regularization to prevent overfitting.
+        Lasso – A linear model with L1 regularization for feature selection.
+        ElasticNet – A combination of L1 and L2 regularization.
+    2. Decision Tree-Based Models:
+        DecisionTreeRegressor – A single decision tree model.
+        RandomForestRegressor – An ensemble of decision trees using bagging.
+        ExtraTreesRegressor – Similar to Random Forest but with more randomization.
+        GradientBoostingRegressor – A boosting-based tree ensemble.
+        HistGradientBoostingRegressor – A more efficient, histogram-based gradient boosting.
+    3. Ensemble Models:
+        AdaBoostRegressor – Boosting model that adjusts weights iteratively.
+        BaggingRegressor – Uses bootstrap aggregation for variance reduction.
+    4. Support Vector and Nearest Neighbor Models:
+        SVR – A Support Vector Machine for regression with a kernel trick.
+        KNeighborsRegressor – A non-parametric model based on the k-nearest neighbors.
+    5. CatBoostRegressor – A gradient boosting method optimized for categorical data.
+
+Different pre-processing steps were also considered:
+    1. Using the gene expression values only, after `VarianceThreshold()` filtering, and `StandardScaler()` transformed.
+    2. Feature selection to reduce the feature space using a genetic algorithm, and adding meta-data (`age`, `sex`, `primary_disease`)
+    3. Dimensionality reduction (`PCA`) to reduce the feature space, and adding meta-data (`age`, `sex`, `primary_disease`)
+    4. Quantile binning of the gene expresison data, and adding meta-data (`age`, `sex`, `primary_disease`)
+    5. Dimensionality reduction (`PCA`) to reduce the feature space, and follow it up with a neural network
+
+In the end I picked `ElasticNet` as the model of my choice and used only the gene expression dataset (through regularization it dropped the added meta-data). Using `optuna` I tried to find the best hyperparameters, which resulted in a model with moderate regularization and a mix of L1 and L2 regularization. The test set MSE turned out to be 2.14, which is high. Despite the model reducing inherently the feature space the data seems to be difficult to train on. 
