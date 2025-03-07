@@ -51,4 +51,10 @@ Different pre-processing steps were also considered:
 4. Quantile binning of the gene expresison data, and adding meta-data (`age`, `sex`, `primary_disease`)
 5. Dimensionality reduction (`PCA`) to reduce the feature space, and follow it up with a neural network
 
+> [!NOTE]  
+> Running `model_selection.ipynb` is time consuming. I used `papermill` to run.
+> ```
+> nohup papermill --request-save-on-cell-execute --progress-bar data_exploration.ipynb data_exploration_converted.ipynb &
+> ```
+
 In the end I picked `ElasticNet` as the model of my choice and used only the gene expression dataset (through regularization it dropped the added meta-data). Using `optuna` I tried to find the best hyperparameters, which resulted in a model with moderate regularization and a mix of L1 and L2 regularization. The test set MSE turned out to be 2.14, which is high. Despite the model reducing inherently the feature space the data seems to be difficult to train on. 
