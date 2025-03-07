@@ -16,7 +16,7 @@ The Lapatinib drug sensitivity was the focus of this project. Therefore the targ
 I had to use gene expression data and the rest was free to use. Based on my knowledge I decided to include `age`, `sex`, and `primary_disease`, next to gene expression. 
 
 > [!NOTE]  
-> For a more in depth overview of the data please check the `data_exploration.ipynb`.
+> For a more in depth overview of the data please check the `data_exploration.ipynb`. Data can be accessed through the following [link](https://drive.google.com/drive/folders/1kvpgSCfgDchlP5wfBjvUR0E8hdNFvE5r?usp=share_link)
 
 ## Training approach
 
@@ -25,30 +25,30 @@ In all cases I used a train-test split without taking the `primary_disease` segm
 For all strategies and models learning curves were plotted (`output/faceted_*`), so were the mean squared errors (MSE) from the training process, and the MSE on the test set. Further metrics were also collected in tables (`output/evaluation_*`)
 
 I decided to try several regressor models from all major categories:
-    1. Linear Models:
-        LinearRegression – A basic linear regression model without regularization.
-        Ridge – A linear model with L2 regularization to prevent overfitting.
-        Lasso – A linear model with L1 regularization for feature selection.
-        ElasticNet – A combination of L1 and L2 regularization.
-    2. Decision Tree-Based Models:
-        DecisionTreeRegressor – A single decision tree model.
-        RandomForestRegressor – An ensemble of decision trees using bagging.
-        ExtraTreesRegressor – Similar to Random Forest but with more randomization.
-        GradientBoostingRegressor – A boosting-based tree ensemble.
-        HistGradientBoostingRegressor – A more efficient, histogram-based gradient boosting.
-    3. Ensemble Models:
-        AdaBoostRegressor – Boosting model that adjusts weights iteratively.
-        BaggingRegressor – Uses bootstrap aggregation for variance reduction.
-    4. Support Vector and Nearest Neighbor Models:
-        SVR – A Support Vector Machine for regression with a kernel trick.
-        KNeighborsRegressor – A non-parametric model based on the k-nearest neighbors.
-    5. CatBoostRegressor – A gradient boosting method optimized for categorical data.
+1. Linear Models:
+    - LinearRegression – A basic linear regression model without regularization.
+    - Ridge – A linear model with L2 regularization to prevent overfitting.
+    - Lasso – A linear model with L1 regularization for feature selection.
+    - ElasticNet – A combination of L1 and L2 regularization.
+2. Decision Tree-Based Models:
+    - DecisionTreeRegressor – A single decision tree model.
+    - RandomForestRegressor – An ensemble of decision trees using bagging.
+    - ExtraTreesRegressor – Similar to Random Forest but with more randomization.
+    - GradientBoostingRegressor – A boosting-based tree ensemble.
+    - HistGradientBoostingRegressor – A more efficient, histogram-based gradient boosting.
+3. Ensemble Models:
+    - AdaBoostRegressor – Boosting model that adjusts weights iteratively.
+    - BaggingRegressor – Uses bootstrap aggregation for variance reduction.
+4. Support Vector and Nearest Neighbor Models:
+    - SVR – A Support Vector Machine for regression with a kernel trick.
+    - KNeighborsRegressor – A non-parametric model based on the k-nearest neighbors.
+5. CatBoostRegressor – A gradient boosting method optimized for categorical data.
 
 Different pre-processing steps were also considered:
-    1. Using the gene expression values only, after `VarianceThreshold()` filtering, and `StandardScaler()` transformed.
-    2. Feature selection to reduce the feature space using a genetic algorithm, and adding meta-data (`age`, `sex`, `primary_disease`)
-    3. Dimensionality reduction (`PCA`) to reduce the feature space, and adding meta-data (`age`, `sex`, `primary_disease`)
-    4. Quantile binning of the gene expresison data, and adding meta-data (`age`, `sex`, `primary_disease`)
-    5. Dimensionality reduction (`PCA`) to reduce the feature space, and follow it up with a neural network
+1. Using the gene expression values only, after `VarianceThreshold()` filtering, and `StandardScaler()` transformed.
+2. Feature selection to reduce the feature space using a genetic algorithm, and adding meta-data (`age`, `sex`, `primary_disease`)
+3. Dimensionality reduction (`PCA`) to reduce the feature space, and adding meta-data (`age`, `sex`, `primary_disease`)
+4. Quantile binning of the gene expresison data, and adding meta-data (`age`, `sex`, `primary_disease`)
+5. Dimensionality reduction (`PCA`) to reduce the feature space, and follow it up with a neural network
 
 In the end I picked `ElasticNet` as the model of my choice and used only the gene expression dataset (through regularization it dropped the added meta-data). Using `optuna` I tried to find the best hyperparameters, which resulted in a model with moderate regularization and a mix of L1 and L2 regularization. The test set MSE turned out to be 2.14, which is high. Despite the model reducing inherently the feature space the data seems to be difficult to train on. 
