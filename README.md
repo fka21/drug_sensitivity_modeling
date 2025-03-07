@@ -5,9 +5,9 @@
 This repo contains code I used to build a predictive model for drug sensitivity. 
 
 The repo structure is:
-    - `input/` contains tables used as input. These contain gene expression values from various cancer cell lines, associated meta-data, and drug sensitivity data.
-    - `output/` contains some of the figures and tables generated during data exploration and training phases.
-    - Jupyter Notebooks contain the code used. I used `data_exploration.ipynb` to get an idea for how the received data looks like. The `model_selection.ipynb` contains different training strategies I tried for selecting the method approach and model for the predictive task. This was followed up by `model_optimization_interpretation.ipynb`, where I tried to optimize the hyperparameters of the model using `optuna` and tried to understand the inner workings of the selected model.
+- `input/` contains tables used as input. These contain gene expression values from various cancer cell lines, associated meta-data, and drug sensitivity data.
+- `output/` contains some of the figures and tables generated during data exploration and training phases.
+- Jupyter Notebooks contain the code used. I used `data_exploration.ipynb` to get an idea for how the received data looks like. The `model_selection.ipynb` contains different training strategies I tried for selecting the method approach and model for the predictive task. This was followed up by `model_optimization_interpretation.ipynb`, where I tried to optimize the hyperparameters of the model using `optuna` and tried to understand the inner workings of the selected model.
 
 ## Data description
 
